@@ -377,6 +377,8 @@ declare interface IBksConfig {
         tab: {
             closeTab: string;
             forceCloseTab: string;
+            goBackTable: string;
+            goForwardTable: string;
             nextTab: string[];
             previousTab: string[];
             reopenLastClosedTab: string;

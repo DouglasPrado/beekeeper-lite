@@ -352,7 +352,7 @@
   }
   .list-item {
     --level: 0;
-    margin-left: calc(1.2rem * var(--level));
+    margin-left: calc(1.5rem * var(--level));
 
     &.schema-item:not(:first-child) {
       margin-top: $gutter-h;
@@ -586,6 +586,7 @@
       }
       .schema-icon {
         line-height: 1.9;
+        margin-right: $gutter-h * 0.75;
       }
       &.open {
         .open-close {

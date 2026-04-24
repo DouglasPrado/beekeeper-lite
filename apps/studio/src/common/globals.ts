@@ -2,7 +2,7 @@
 
 export default {
   updateCheckInterval: 1000 * 60 * 60 * 24, // 24 hours
-  freeTrialDays: 14,
+  freeTrialDays: 365 * 10,
   psqlTimeout: 15000, // 15 seconds
   psqlIdleTimeout: 20000,
   defaultChunkSize: 100,

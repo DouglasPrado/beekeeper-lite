@@ -2,10 +2,25 @@ import _ from 'lodash'
 import { Module } from "vuex";
 import { State as RootState } from '../index'
 import rawLog from '@bksLogger'
-import { TransportOpenTab, duplicate, matches, TabTypeConfig } from '@/common/transport/TransportOpenTab';
+import { TransportOpenTab, duplicate, matches, setFilters, getFilters, TabTypeConfig } from '@/common/transport/TransportOpenTab';
+import { TableFilter } from '@/lib/db/models';
 import Vue from 'vue';
 
 const log = rawLog.scope('TabModule')
+
+export interface NavEntry {
+  tableName: string
+  schemaName?: string
+  entityType?: string
+  title: string
+  titleScope?: string
+  filters?: TableFilter[] | null
+}
+
+interface NavStack {
+  back: NavEntry[]
+  forward: NavEntry[]
+}
 
 interface State {
   tabs: TransportOpenTab[],
@@ -13,6 +28,28 @@ interface State {
   lastClosedTabs: TransportOpenTab[]
   /** All tab type configurations available. */
   allTabTypeConfigs: TabTypeConfig.Config[];
+  /** Per-tab navigation history (in-memory, not persisted). Keyed by tab.id. */
+  navigationStacks: Record<number, NavStack>;
+}
+
+function tabToNavEntry(tab: TransportOpenTab): NavEntry {
+  return {
+    tableName: tab.tableName,
+    schemaName: tab.schemaName,
+    entityType: tab.entityType,
+    title: tab.title,
+    titleScope: tab.titleScope,
+    filters: getFilters(tab),
+  }
+}
+
+function applyNavEntry(tab: TransportOpenTab, entry: NavEntry) {
+  tab.tableName = entry.tableName
+  tab.schemaName = entry.schemaName
+  tab.entityType = entry.entityType
+  tab.title = entry.title
+  tab.titleScope = entry.titleScope
+  setFilters(tab, entry.filters ?? null)
 }
 
 
@@ -34,6 +71,7 @@ export const TabModule: Module<State, RootState> = {
         menuItem: { label: 'Add Shell' },
       },
     ],
+    navigationStacks: {},
   }),
   getters: {
     tabTypeConfigs(state, _getters, _rootState, rootGetters) {
@@ -72,7 +110,13 @@ export const TabModule: Module<State, RootState> = {
           table
         }
       })
-    }
+    },
+    canGoBack: (state) => (tabId: number): boolean => {
+      return (state.navigationStacks[tabId]?.back.length ?? 0) > 0
+    },
+    canGoForward: (state) => (tabId: number): boolean => {
+      return (state.navigationStacks[tabId]?.forward.length ?? 0) > 0
+    },
   },
   mutations: {
     set(state, tabs: TransportOpenTab[]) {
@@ -150,7 +194,33 @@ export const TabModule: Module<State, RootState> = {
       if (index !== -1) {
         Vue.set(state.tabs, index, tab);
       }
-    }
+    },
+    pushBack(state, { tabId, entry }: { tabId: number, entry: NavEntry }) {
+      if (!state.navigationStacks[tabId]) {
+        Vue.set(state.navigationStacks, tabId, { back: [], forward: [] })
+      }
+      state.navigationStacks[tabId].back.push(entry)
+    },
+    pushForward(state, { tabId, entry }: { tabId: number, entry: NavEntry }) {
+      if (!state.navigationStacks[tabId]) {
+        Vue.set(state.navigationStacks, tabId, { back: [], forward: [] })
+      }
+      state.navigationStacks[tabId].forward.push(entry)
+    },
+    popBack(state, tabId: number) {
+      state.navigationStacks[tabId]?.back.pop()
+    },
+    popForward(state, tabId: number) {
+      state.navigationStacks[tabId]?.forward.pop()
+    },
+    clearForward(state, tabId: number) {
+      if (state.navigationStacks[tabId]) {
+        state.navigationStacks[tabId].forward = []
+      }
+    },
+    clearNavStack(state, tabId: number) {
+      Vue.delete(state.navigationStacks, tabId)
+    },
   },
   actions: {
     async load(context) {
@@ -221,6 +291,7 @@ export const TabModule: Module<State, RootState> = {
         tab.deletedAt = new Date()
         tab.position = 99
         context.commit('remove', tab)
+        if (tab.id != null) context.commit('clearNavStack', tab.id)
       })
       const { usedConfig } = context.rootState
       if (usedConfig?.id) {
@@ -257,7 +328,40 @@ export const TabModule: Module<State, RootState> = {
       tab.deletedAt = null
 
       await context.dispatch('save', [tab, oldActive].filter((x) => !!x))
-    }
+    },
+    async navigateToTable(context, { tab, entry }: { tab: TransportOpenTab, entry: NavEntry }) {
+      if (!tab || tab.tabType !== 'table' || tab.id == null) return
+      const sameTarget =
+        tab.tableName === entry.tableName &&
+        (tab.schemaName || null) === (entry.schemaName || null) &&
+        tab.filters === (entry.filters ? JSON.stringify(entry.filters) : null)
+      if (sameTarget) return
+
+      context.commit('pushBack', { tabId: tab.id, entry: tabToNavEntry(tab) })
+      context.commit('clearForward', tab.id)
+      applyNavEntry(tab, entry)
+      await context.dispatch('save', tab)
+    },
+    async goBack(context, tab: TransportOpenTab) {
+      if (!tab || tab.id == null) return
+      const stack = context.state.navigationStacks[tab.id]
+      if (!stack || stack.back.length === 0) return
+      const previous = stack.back[stack.back.length - 1]
+      context.commit('pushForward', { tabId: tab.id, entry: tabToNavEntry(tab) })
+      context.commit('popBack', tab.id)
+      applyNavEntry(tab, previous)
+      await context.dispatch('save', tab)
+    },
+    async goForward(context, tab: TransportOpenTab) {
+      if (!tab || tab.id == null) return
+      const stack = context.state.navigationStacks[tab.id]
+      if (!stack || stack.forward.length === 0) return
+      const next = stack.forward[stack.forward.length - 1]
+      context.commit('pushBack', { tabId: tab.id, entry: tabToNavEntry(tab) })
+      context.commit('popForward', tab.id)
+      applyNavEntry(tab, next)
+      await context.dispatch('save', tab)
+    },
 
   }
 }

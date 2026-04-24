@@ -157,7 +157,7 @@ export const FkLinkMixin = {
       const payload = {
         table, filters, titleScope: values.join(','),
       }
-      this.$root.$emit('loadTable', payload)
+      this.$root.$emit(AppEvent.navigateToTable, payload)
       if (openJsonViewer) {
         this.trigger(AppEvent.selectSecondarySidebarTab, "json-viewer")
         this.trigger(AppEvent.toggleSecondarySidebar, true)

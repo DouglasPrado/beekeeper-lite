@@ -111,6 +111,7 @@
         >
           <template v-slot:default="slotProps">
             <TableTable
+              :key="`table-${tab.id}-${tab.schemaName || ''}-${tab.tableName}`"
               :tab="tab"
               :active="activeTab?.id === tab.id"
               :table="slotProps.table"
@@ -434,6 +435,7 @@ export default Vue.extend({
         { event: AppEvent.createTableFromFile, handler: this.beginImport },
         { event: 'historyClick', handler: this.createQueryFromItem },
         { event: AppEvent.loadTable, handler: this.openTable },
+        { event: AppEvent.navigateToTable, handler: this.navigateToTable },
         { event: AppEvent.openTableProperties, handler: this.openTableProperties },
         { event: 'loadSettings', handler: this.openSettings },
         { event: 'loadTableCreate', handler: this.loadTableCreate },
@@ -477,10 +479,17 @@ export default Vue.extend({
         'tab.switchTab7': this.handleSwitchTab.bind(this, 6),
         'tab.switchTab8': this.handleSwitchTab.bind(this, 7),
         'tab.switchTab9': this.handleSwitchTab.bind(this, 8),
+        'tab.goBackTable': this.goBackTable,
+        'tab.goForwardTable': this.goForwardTable,
       })
       // FIXME (azmi): move this to default config file
       if(this.$config.isMac) {
         result['meta+shift+t'] = this.reopenLastClosedTab
+        // Chrome-style back/forward shortcuts on macOS
+        result['meta+['] = this.goBackTable
+        result['meta+left'] = this.goBackTable
+        result['meta+]'] = this.goForwardTable
+        result['meta+right'] = this.goForwardTable
       }
 
       return result
@@ -1031,6 +1040,43 @@ export default Vue.extend({
         await this.addTab(tab)
       }
     },
+    async navigateToTable({ table, filters, titleScope }) {
+      const active = this.activeTab
+      if (!active || active.tabType !== 'table') {
+        return this.openTable({ table, filters })
+      }
+      const entry = {
+        tableName: table.name ?? table.tableName,
+        schemaName: table.schema ?? table.schemaName,
+        entityType: table.entityType,
+        title: table.name ?? table.tableName,
+        titleScope: titleScope ?? 'all',
+        filters: filters ?? null,
+      }
+      await this.$store.dispatch('tabs/navigateToTable', { tab: active, entry })
+    },
+    async goBackTable() {
+      const active = this.activeTab
+      if (!active || active.tabType !== 'table' || active.id == null) return
+      if (!this.$store.getters['tabs/canGoBack'](active.id)) return
+      await this.$store.dispatch('tabs/goBack', active)
+    },
+    async goForwardTable() {
+      const active = this.activeTab
+      if (!active || active.tabType !== 'table' || active.id == null) return
+      if (!this.$store.getters['tabs/canGoForward'](active.id)) return
+      await this.$store.dispatch('tabs/goForward', active)
+    },
+    handleMouseNavigation(event: MouseEvent) {
+      // Mouse buttons 3 (back) and 4 (forward) — Chrome-style navigation
+      if (event.button === 3) {
+        event.preventDefault()
+        this.goBackTable()
+      } else if (event.button === 4) {
+        event.preventDefault()
+        this.goForwardTable()
+      }
+    },
     openExportModal(options) {
       this.tableExportOptions = options
       this.showExportModal = true
@@ -1192,10 +1238,12 @@ export default Vue.extend({
   },
   beforeDestroy() {
     this.unregisterHandlers(this.rootBindings)
+    window.removeEventListener('mouseup', this.handleMouseNavigation)
   },
 
   async mounted() {
     this.registerHandlers(this.rootBindings)
+    window.addEventListener('mouseup', this.handleMouseNavigation)
   }
 })
 </script>

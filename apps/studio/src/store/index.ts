@@ -81,6 +81,7 @@ export interface State {
   usedConfig: Nullable<IConnection>,
   server: Nullable<IDbConnectionPublicServer>,
   connected: boolean,
+  connectionSwitching: boolean,
   connectionType: Nullable<string>,
   supportedFeatures: Nullable<SupportedFeatures>,
   database: Nullable<string>,
@@ -141,6 +142,7 @@ const store = new Vuex.Store<State>({
     usedConfig: null,
     server: null,
     connected: false,
+    connectionSwitching: false,
     connectionType: null,
     supportedFeatures: null,
     database: null,
@@ -428,6 +430,9 @@ const store = new Vuex.Store<State>({
     },
     connectionType(state, connectionType: string) {
       state.connectionType = connectionType;
+    },
+    connectionSwitching(state, value: boolean) {
+      state.connectionSwitching = value
     },
     connected(state, connected: boolean) {
       state.connected = connected;

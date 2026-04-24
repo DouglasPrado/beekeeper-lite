@@ -8,7 +8,7 @@
       <titlebar />
       <template v-if="storeInitialized">
         <!-- TODO (@day): need to come up with a better way to check this. Just set a 'connected' flag? -->
-        <connection-interface v-if="!connected" />
+        <connection-interface v-if="!connected && !connectionSwitching" />
         <core-interface
           @databaseSelected="databaseSelected"
           v-else
@@ -44,7 +44,6 @@
     <input-jwt-modal />
     <util-died-modal />
     <template v-if="licensesInitialized">
-      <trial-expired-modal />
       <license-expired-modal />
       <lifetime-license-expired-modal />
     </template>
@@ -69,16 +68,13 @@ import UpgradeRequiredModal from './components/upsell/UpgradeRequiredModal.vue'
 import WorkspaceSignInModal from '@/components/data/WorkspaceSignInModal.vue'
 import ImportQueriesModal from '@/components/data/ImportQueriesModal.vue'
 import ImportConnectionsModal from '@/components/data/ImportConnectionsModal.vue'
-import TimeAgo from 'javascript-time-ago'
 import EnterLicenseModal from './components/ultimate/EnterLicenseModal.vue'
 import { AppEvent } from './common/AppEvent'
 import globals from './common/globals'
 import NotificationManager from './components/NotificationManager.vue'
-import Noty from 'noty';
 import ConfirmationModalManager from '@/components/common/modals/ConfirmationModalManager.vue'
 import Dropzone from '@/components/Dropzone.vue'
 import UtilDiedModal from '@/components/UtilDiedModal.vue'
-import TrialExpiredModal from '@/components/license/TrialExpiredModal.vue'
 import LicenseExpiredModal from '@/components/license/LicenseExpiredModal.vue'
 import LifetimeLicenseExpiredModal from '@/components/license/LifetimeLicenseExpiredModal.vue'
 import type { LicenseStatus } from "@/lib/license";
@@ -101,7 +97,7 @@ export default Vue.extend({
     CoreInterface, ConnectionInterface, Titlebar, AutoUpdater, NotificationManager,
     DataManager, UpgradeRequiredModal, ConfirmationModalManager, Dropzone,
     UtilDiedModal, WorkspaceSignInModal, ImportQueriesModal, ImportConnectionsModal,
-    EnterLicenseModal, TrialExpiredModal, LicenseExpiredModal,
+    EnterLicenseModal, LicenseExpiredModal,
     LifetimeLicenseExpiredModal, WorkspaceCreateModal, WorkspaceRenameModal, WorkspaceDeleteModal,
     PluginManagerModal, ConfigurationWarningModal, PluginController, LockManager, KeyboardShortcutsModal,
     InputJwtModal,
@@ -119,7 +115,7 @@ export default Vue.extend({
       return this.$config.isDevelopment ||
         (this.license && this.license.active)
     },
-    ...mapState(['storeInitialized', 'connected', 'database']),
+    ...mapState(['storeInitialized', 'connected', 'connectionSwitching', 'database']),
     ...mapState('licenses', {
       status: (state) => state.status,
       licensesInitialized: (state) => state.initialized,
@@ -153,12 +149,9 @@ export default Vue.extend({
     },
   },
   async beforeDestroy() {
-    clearInterval(this.interval)
     clearInterval(this.licenseInterval)
   },
   async mounted() {
-    this.notifyFreeTrial()
-    this.interval = setInterval(this.notifyFreeTrial, globals.trialNotificationInterval)
     this.$store.dispatch('licenses/updateAll');
     this.licenseInterval = setInterval(
       () => this.$store.dispatch('licenses/updateAll'),
@@ -192,32 +185,6 @@ export default Vue.extend({
 
   },
   methods: {
-    notifyFreeTrial() {
-      Noty.closeAll('trial')
-      if (this.isTrial && this.isUltimate) {
-        const ta = new TimeAgo('en-US')
-        const validUntil = this.status.license.validUntil
-        const options = {
-          text: `Your free trial expires ${ta.format(validUntil)} (${validUntil.toLocaleDateString()})`,
-          type: 'warning',
-          closeWith: ['button'],
-          layout: 'bottomRight',
-          timeout: false,
-          queue: 'trial',
-          buttons: [
-            Noty.button('Buy a License', 'btn btn-flat', () => {
-              window.location.href = "https://beekeeperstudio.io/pricing"
-            }),
-            Noty.button('Enter License', 'btn btn-primary', () => {
-              this.$root.$emit(AppEvent.enterLicense)
-            })
-          ]
-        }
-        // @ts-ignore
-        const n = new Noty(options)
-        n.show()
-      }
-    },
     databaseSelected(_db) {
       // TODO: do something here if needed
     },

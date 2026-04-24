@@ -8,14 +8,7 @@
         :class="tabClasses('tables')"
         v-show="activeItem === 'tables'"
       >
-        <surreal-namespace-dropdown
-          v-if="connectionType === 'surrealdb'"
-          @namespaceSelected="namespaceSelected"
-        />
-        <database-dropdown
-          @databaseSelected="databaseSelected"
-        />
-        <table-list />
+        <database-tree-navigator />
       </div>
 
       <!-- History -->
@@ -43,11 +36,9 @@
 
 <script>
   import _ from 'lodash'
-  import TableList from './core/TableList.vue'
   import HistoryList from './core/HistoryList.vue'
   import FavoriteList from './core/FavoriteList.vue'
-  import DatabaseDropdown from './core/DatabaseDropdown.vue'
-  import SurrealNamespaceDropdown from './core/SurrealNamespaceDropdown.vue'
+  import DatabaseTreeNavigator from './core/DatabaseTreeNavigator.vue'
 
   import { mapState, mapGetters, mapActions } from 'vuex'
   import rawLog from '@bksLogger'
@@ -55,7 +46,7 @@
   const log = rawLog.scope('core-sidebar')
 
   export default {
-    components: { TableList, DatabaseDropdown, HistoryList, FavoriteList, SurrealNamespaceDropdown},
+    components: { HistoryList, FavoriteList, DatabaseTreeNavigator },
     data() {
       return {
         tableLoadError: null,
@@ -99,23 +90,6 @@
           show: (this.activeItem === item),
           active: (this.activeItem === item)
         }
-      },
-      async databaseSelected(db) {
-        log.info("Pool database selected", db)
-        this.$store.dispatch('changeDatabase', db).catch((e) => {
-          this.$noty.error(e.message);
-        })
-        this.allExpanded = false
-      },
-      async namespaceSelected(ns) {
-        log.info("Pool namespace selected", ns);
-        this.$store.dispatch('changeNamespace', ns).catch((e) => {
-          this.$noty.error(e.message);
-        })
-      },
-      async disconnect() {
-        await this.$store.dispatch('disconnect')
-        this.$noty.success("Successfully Disconnected")
       },
       ...mapActions({
         setActiveItem: "sidebar/setGlobalSidebarActiveItem",
